@@ -1,0 +1,34 @@
+# Byggfiler och mellanlagring
+/build/
+*.o
+*.d
+*.a
+*.bin
+*.elf
+*.map
+*.tmp
+*.log
+
+# SDK-configurationsfiler (lokala)
+sdkconfig
+sdkconfig.old
+
+# IDE-specifika filer
+.vscode/
+.idea/
+
+# Python-virtual environments
+*.venv/
+python_env/
+__pycache__/
+
+# CMake genererade filer
+CMakeLists.txt.user
+CMakeCache.txt
+cmake_install.cmake
+*.cmake
+
+# Operativsystems-specifika
+.DS_Store
+Thumbs.db
+*.swp
