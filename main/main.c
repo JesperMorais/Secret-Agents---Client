@@ -1,59 +1,54 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include <stdio.h>
+
+#include "wifi_handler.h"
+#include "printer_helper.h"
+#include "nvs_flash.h"
+#include "esp_event.h"
 #include "esp_system.h"
-#include "esp_log.h"
-#include "driver/uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
 #include "string.h"
-#include "driver/gpio.h"
+#include "serial_handler.h"
 
-static const int RX_BUF_SIZE = 1024;
+EventGroupHandle_t wifi_event_group;
+wifi_init_param_t w_param = {
+    .ssid = CONFIG_WIFI_SSID,
+    .password = CONFIG_WIFI_PASSWORD,
+};
 
-#define UART_PORT UART_NUM_0
-#define TXD_PIN (GPIO_NUM_1)
-#define RXD_PIN (GPIO_NUM_3)
 
-void init(void)
-{
-    uart_driver_install(UART_PORT, RX_BUF_SIZE, 0, 0, NULL, 0);
-}
-
-int sendData(const char* logName, const char* data)
-{
-    const int len = strlen(data);
-    const int txBytes = uart_write_bytes(UART_PORT, data, len);
-    ESP_LOGI(logName, "Wrote %d bytes", txBytes);
-    return txBytes;
-}
-
-static void tx_task(void *arg)
-{
-    static const char *TX_TASK_TAG = "TX_TASK";
-    esp_log_level_set(TX_TASK_TAG, ESP_LOG_INFO);
-    while (1) {
-        sendData(TX_TASK_TAG, "Hello world");
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-    }
-}
-
-static void rx_task(void *arg)
-{
-    static const char *RX_TASK_TAG = "RX_TASK";
-    esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
-    uint8_t* data = (uint8_t*) malloc(RX_BUF_SIZE + 1);
-    while (1) {
-        const int rxBytes = uart_read_bytes(UART_PORT, data, RX_BUF_SIZE, 1000 / portTICK_PERIOD_MS);
-        if (rxBytes > 0) {
-            data[rxBytes] = 0;
-            ESP_LOGI(RX_TASK_TAG, "Read %d bytes: '%s'", rxBytes, data);
-            ESP_LOG_BUFFER_HEXDUMP(RX_TASK_TAG, data, rxBytes, ESP_LOG_INFO);
-        }
-    }
-    free(data);
-}
+//TODO: MQTT 
+//TODO: 1. Vänta på att vi har wifi,
+//2. skapa client
+//3. subscriba till torget,
+//4. någon typ av callback som skickar datan från torget via serializer -> upp till användaren
+//5. Kunna skicka data från serialzer till Torget
 
 void app_main(void)
-{
+{   
+    PRINTFC_MAIN("Main is starting");
+
+    PRINTFC_MAIN("NVS Initialize");
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        nvs_flash_erase();
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    PRINTFC_MAIN("Creating event group");
+    wifi_event_group = xEventGroupCreate();
+
+    w_param.wifi_event_group = wifi_event_group;
+   
     init();
+
+    wifi_handler_start(&w_param);
+
     xTaskCreate(rx_task, "uart_rx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(tx_task, "uart_tx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 2, NULL);
 }

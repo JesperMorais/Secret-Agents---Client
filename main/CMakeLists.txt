@@ -1,4 +1,4 @@
 idf_component_register(
-    SRCS main.c  # Lägg till alla .c-filer här
-    INCLUDE_DIRS includes # Lägg till inkluderingsmappen
+    SRCS main.c wifi_handler.c serial_handler.c mqtt_handler.c
+    INCLUDE_DIRS includes 
 )
