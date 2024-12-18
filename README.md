@@ -1,1 +1,12 @@
 ## SECRET *** GAME
+
+Innehåller
+
+WIFI
+
+MQTT CLient 
+
+UART COMMUNKATION
+
+HTTPS TILL GO SERVER
+
