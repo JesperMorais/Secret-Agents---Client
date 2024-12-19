@@ -1,19 +1,21 @@
 #include "mqtt_handler.h"
 #include "printer_helper.h"
 
-const char* BROKER_ADRESS = "WWW";
+const char* BROKER_ADDRESS = "mqtt://172.16.217.243:1883";
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
     int msg_id;
+
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
+
         PRINTFC_MQTT("MQTT Connected");
         msg_id = esp_mqtt_client_subscribe(client, "/torget", 2);
-
         break;
+
     case MQTT_EVENT_DISCONNECTED:
         PRINTFC_MQTT("DISCONNECTED!");
 
@@ -45,7 +47,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
         if (strncmp(event->data, "send binary please", event->data_len) == 0) {
             PRINTFC_MQTT("Sending binary?");
-            send_binary(client);
+            
         }
         break;
     case MQTT_EVENT_ERROR:
@@ -67,18 +69,26 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-static void mqtt_app_start(void){
+void mqtt_app_start(mqtt_init_param_t* params){
 
     //TODO: FIXA SÅ VI INTE KÖR FÖRENS VI HAR WIFI    
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
-            .address.uri = BROKER_ADRESS,
+            .address.uri = BROKER_ADDRESS,
             //.verification.certificate =,
         },
     };
 
+
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
 
+
+    PRINTFC_MQTT("Väntar på wifi");
+    xEventGroupWaitBits(params->wifi_event_group, BIT0 | BIT1, pdFALSE, pdTRUE, portMAX_DELAY);
+    
+    PRINTFC_MQTT("Startar igång mqtt event!");
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+
+    PRINTFC_MQTT("Startar igång mqtt!");
     esp_mqtt_client_start(client);
 }
