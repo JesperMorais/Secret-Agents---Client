@@ -12,7 +12,11 @@
 #include "esp_wifi.h"
 #include "mqtt_handler.h" // Avkommentera när du vill använda MQTT
 
-EventGroupHandle_t wifi_event_group;
+//skapa event group för hallå koll på om certifikatet är klart
+
+EventGroupHandle_t cert_event_group; //håller koll på om certifikatet är signat och klart för att kunna connecta med Brokern
+EventGroupHandle_t wifi_event_group;    //Håller koll på om vi är connectade till wifi samt om vi har en IP adress
+
 wifi_init_param_t w_param = {
     .ssid = CONFIG_WIFI_SSID,
     .password = CONFIG_WIFI_PASSWORD,
@@ -37,17 +41,25 @@ void app_main(void)
     esp_netif_init();
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    PRINTFC_MAIN("Creating event group");
+    PRINTFC_MAIN("Creating event groups");
     wifi_event_group = xEventGroupCreate();
+    cert_event_group = xEventGroupCreate();
+
     w_param.wifi_event_group = wifi_event_group;
     uart_driver_install(UART_NUM_0, 2048, 0, 0, NULL, 0);
 
 
-    wifi_handler_start(&w_param);
+    wifi_handler_start(&w_param); // Starta WiFi denna gör vi inte i loop eller task för den styrs av eventhandler och skall dras igång en gång
 
     // Starta MQTT senare när WiFi fungerar
     mqtt_param.wifi_event_group = wifi_event_group;
+    mqtt_param.cert_event_group = cert_event_group;
+    //hoppar in i mqtt_handler.c och kollar om vi har wifi och cert klart
+    //TODO: FIXA SÅ VI INTE KÖR FÖRENS VI HAR CERT
     mqtt_app_start(&mqtt_param);
+
+    //starta https
+    xTaskCreate(send_csr_task, "send_csr_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
 
     xTaskCreate(rx_task, "uart_rx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(tx_task, "uart_tx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 2, NULL);

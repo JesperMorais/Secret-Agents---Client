@@ -3,6 +3,8 @@
 
 const char* BROKER_ADDRESS = "mqtt://172.16.217.243:1883";
 
+esp_mqtt_client_handle_t client;
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     esp_mqtt_event_handle_t event = event_data;
@@ -80,7 +82,7 @@ void mqtt_app_start(mqtt_init_param_t* params){
     };
 
 
-    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    client = esp_mqtt_client_init(&mqtt_cfg);
 
 
     PRINTFC_MQTT("Väntar på wifi");
@@ -92,3 +94,4 @@ void mqtt_app_start(mqtt_init_param_t* params){
     PRINTFC_MQTT("Startar igång mqtt!");
     esp_mqtt_client_start(client);
 }
+
