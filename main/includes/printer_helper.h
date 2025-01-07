@@ -31,7 +31,7 @@ static const char *reset = "\033[0m";
     printf("\n")
 
 #define PRINTFC_WIFI_HANDLER(format, ...) \
-    PRINTFC(magenta, "WiFi Handler: ");   \
+    PRINTFC(white, "WiFi Handler: ");   \
     printf(format, ##__VA_ARGS__);        \
     printf("\n")
 
@@ -39,5 +39,10 @@ static const char *reset = "\033[0m";
     PRINTFC(magenta, "MQTT: ");   \
     printf(format, ##__VA_ARGS__);        \
     printf("\n")
+
+#define PRINTFC_CERT(format, ...) \
+    PRINTFC(red, "CERT: ");   \
+    printf(format, ##__VA_ARGS__);        \
+    printf("\n")    
 
 #endif

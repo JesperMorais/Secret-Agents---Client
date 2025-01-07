@@ -9,8 +9,6 @@ static const int RX_BUF_SIZE = 1024;
 
 void init(void);
 
-int sendData(const char* data);
-
-void tx_task(void *arg);
-
 void rx_task(void *arg);
+
+void handle_data(char* input);
