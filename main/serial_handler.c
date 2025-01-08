@@ -7,6 +7,7 @@
 #include "printer_helper.h"
 #include "mqtt_handler.h"
 #include "global_params.h"
+#include "ctype.h"
 
 void init(void)
 {
@@ -73,12 +74,16 @@ void handle_data(char* input) {
     if (strncmp(topic, "/torget", topic_len) == 0) {
         PRINTFC_CLIENT("Sending to torget: %s", msg);
 
-        //skicka till mqtt
-        mqtt_send_to_broker(topic, msg);
+        // Skapa JSON-meddelande
+        char json_payload[200];
+        snprintf(json_payload, sizeof(json_payload), "{\"id\": %d, \"medelande\": \"%s\"}", playerID, msg);
+
+        // Skicka till MQTT-broker
+        mqtt_send_to_broker(topic, json_payload);
 
     } else if (strncmp(topic, "/uplink", topic_len) == 0) {
         PRINTFC_CLIENT("Sending to uplink: %s", msg);
-
+        trim(msg);
         // Validera meddelandet
         if (strcmp(msg, "ok") != 0 && strcmp(msg, "neka") != 0 &&
             strcmp(msg, "lyckas") != 0 && strcmp(msg, "sabotera") != 0) {
@@ -101,4 +106,14 @@ void handle_data(char* input) {
     }else {
         PRINTFC_CLIENT("Invalid topic: %s", topic);
     }
+}
+
+
+void trim(char *str) {
+    char *end;
+    while (isspace((unsigned char)*str)) str++;
+    if (*str == 0) return;
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+    end[1] = '\0';
 }

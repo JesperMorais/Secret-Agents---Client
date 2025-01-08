@@ -12,3 +12,6 @@ void init(void);
 void rx_task(void *arg);
 
 void handle_data(char* input);
+
+// Funktion för att trimma whitespace från en sträng
+void trim(char *str);

@@ -28,16 +28,20 @@ extern char* root_ca_pem;
 
 #define max_attempts 5
 
-https_init_param_t globalParam;
+https_init_param_t* globalParam;
 
 void cert_manage_task(void *pvParameters)
 {
     PRINTFC_CERT("Cert manage task started");
     https_init_param_t *param = (https_init_param_t *)pvParameters;
 
-    globalParam = *param;
+    globalParam = param;
+    if (globalParam == NULL) {
+        PRINTFC_CERT("Error: globalParam is NULL");
+        vTaskDelete(NULL);
+    }
     PRINTFC_CERT("waiting for wifi connection");
-    xEventGroupWaitBits(param->wifi_event_group, WIFI_CONNECTED_BIT | WIFI_HAS_IP_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
+    xEventGroupWaitBits(param->wifi_event_group, WIFI_CONNECTED_BIT | WIFI_HAS_IP_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
     PRINTFC_CERT("Got wifi, Cert manage task started");
 
@@ -122,34 +126,49 @@ void cert_manage_task(void *pvParameters)
     //MAKE FAKE JSON WITH NO DATA
     char* json = "{}";
     size_t json_len = strlen(json);
-
+    
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_post_field(client, json, json_len);
 
-    PRINTFC_CERT("Perfomeing now");
-    esp_err_t err = esp_http_client_perform(client);
-    if(err != ESP_OK){
-        PRINTFC_CERT("Failed to perform http request: %d", err);
+
+    uint8_t attempts = 0;
+    int status = 0;
+
+    PRINTFC_CERT("Trying to connect to server");
+    do {
+        PRINTFC_CERT("Attempt %d of %d", attempts + 1, max_attempts);
+        esp_err_t err = esp_http_client_perform(client);
+
+        if (err == ESP_OK) {
+            status = esp_http_client_get_status_code(client);
+            PRINTFC_CERT("HTTP POST Status = %d", status);
+            if (status == 200) {
+                PRINTFC_CERT("Successfully connected to server");
+                break;
+            }
+        } else {
+            PRINTFC_CERT("Failed to perform HTTP request: %s", esp_err_to_name(err));
+        }
+
+        attempts++;
+        if (attempts < max_attempts) {
+            vTaskDelay(pdMS_TO_TICKS(3000)); // Vänta 3 sekunder innan nästa försök
+        }
+    } while (status != 200 && attempts < max_attempts);
+
+    //IFALL VI HAR NÅTT MAX ATTEMPTS OCH INTE FÅTT 200
+    if (status != 200) {
+        PRINTFC_CERT("Failed to connect to server after %d attempts", max_attempts);
         esp_http_client_cleanup(client);
+        free(root_ca_pem);
         vTaskDelete(NULL);
     }
-    else{
-        int status = esp_http_client_get_status_code(client);
-        PRINTFC_CERT("HTTP POST Status = %d", status);
-    }
     
+    PRINTFC_CERT("Cleaning up HTTP client");
     esp_http_client_cleanup(client);
+    free(root_ca_pem);
 
-    PRINTFC_CERT("Waiting for cert to be ready");
-    //Väntar på att cert ska bli klart innan vi skickar ready check
-
-    //VI BEHÖVER INTE VÄNTA GÄR FÖR PERFORMANCE KOMMER RETURNA NÄR DEN ÄR KLAR MED BÅDA REQUESTSEN, DÅ VI KÖR I SEKVENTIELL ORDNING
-    //skickar readychekci innan vi deletar tasken
-    PRINTFC_CERT("Cert is ready, sending ready check");
-    send_ready_check();
-
-    vTaskDelay(pdMS_TO_TICKS(200)); // Kort fördröjning
-    PRINTFC_CERT("Cert manage task done");
+    PRINTFC_CERT("Cert manage task completed");
     vTaskDelete(NULL);
 }
 
@@ -166,6 +185,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *event){
                 char* new_buf = realloc(ctx->resp.body_buf, new_size + 1);
                 if(new_buf == NULL){
                     PRINTFC_CERT("Failed to realloc buffer");
+                    free(ctx->resp.body_buf);
+                    ctx->resp.body_buf = NULL;
                     return ESP_FAIL;
                 }
 
@@ -200,7 +221,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *event){
                     nvs_close(my_handle);
                     if (ret == ESP_OK) {
                         PRINTFC_CERT("Certificate saved in NVS");
-                        xEventGroupSetBits(globalParam.cert_event_group, CERT_READY_BIT);   
+                        xEventGroupSetBits(globalParam->cert_event_group, CERT_READY_BIT);   
+                        PRINTFC_CERT("Cert ready bit set");
                     }
                 }
             }else{
@@ -208,11 +230,15 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *event){
                 PRINTFC_CERT("Received data: %s", ctx->resp.body_buf);
             }
             
+            PRINTFC_CLIENT("Freeing buffer");
             // Städa upp bufferten
             if (ctx->resp.body_buf) {
+                PRINTFC_CERT("Freeing buffer");
                 free(ctx->resp.body_buf);
-                ctx->resp.body_buf = NULL;
+                ctx->resp.body_buf = NULL; // Sätt pekaren till NULL för att undvika dubbla frigörningar
                 ctx->resp.total_size = 0;
+            }else{
+                PRINTFC_CERT("Buffer was NULL");
             }
             break;
         }
@@ -386,10 +412,10 @@ esp_err_t send_csr_request(const char* csr) {
     esp_http_client_set_header(client, "Content-Type", "application/x-pem-file");
     esp_http_client_set_post_field(client, csr, strlen(csr));
 
+    PRINTFC_CERT("sening CSR to server");
     esp_err_t err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
 
-    PRINTFC_CERT("CSR sent to server");
     return err;
 }
 
@@ -441,10 +467,12 @@ esp_err_t send_ready_check() {
         .total_size = 0,
     };
 
+    PRINTFC_CERT("Reading client cert and key from NVS");
     char* client_cert = NULL;
     char* client_key = NULL;
     size_t cert_size = 0, key_size = 0;
 
+    PRINTFC_CERT("4");
     nvs_handle_t nvs_handle;
         if (nvs_open_from_partition("eol", "certs", NVS_READONLY, &nvs_handle) == ESP_OK) {
             nvs_get_str(nvs_handle, "ClientCert", NULL, &cert_size);
@@ -460,6 +488,7 @@ esp_err_t send_ready_check() {
             nvs_close(nvs_handle);
     }
 
+    PRINTFC_CERT("Client cert and key read from NVS");
     if(root_ca_pem == NULL){
         PRINTFC_CERT("Root CA not INIT YET ( send_ready_check )");
         return ESP_FAIL;
@@ -477,17 +506,26 @@ esp_err_t send_ready_check() {
         .event_handler = _http_event_handler, // Kan återanvända samma handler om nödvändigt
     };
 
+     PRINTFC_CERT("3");
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         PRINTFC_CERT("Failed to init HTTP client for ready check");
         return ESP_FAIL;
     }
-
+    PRINTFC_CERT("1");
     // Ställ in header och body
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_post_field(client, json_body, strlen(json_body));
 
+    PRINTFC_CERT("5");
     // Skicka HTTP-förfrågan
+    if (client_cert == NULL || client_key == NULL) {
+    PRINTFC_CERT("Client cert or key is NULL, cannot proceed with ready check");
+    if (client_cert) free(client_cert);
+    if (client_key) free(client_key);
+    return ESP_FAIL;
+}
+
     esp_err_t err = esp_http_client_perform(client);
     if (err != ESP_OK) {
         PRINTFC_CERT("Failed to perform HTTP request for ready check: %s", esp_err_to_name(err));
@@ -496,6 +534,7 @@ esp_err_t send_ready_check() {
         PRINTFC_CERT("Ready check POST Status = %d", status);
     }
 
+    PRINTFC_CERT("6");
     // Städa upp klienten
     esp_http_client_cleanup(client);
 

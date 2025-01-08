@@ -160,6 +160,9 @@ void mqtt_app_start(mqtt_init_param_t* params){
     }
     //TODO GLÖM INTE FREEA ALLT MINNE SOM ALLOKERAS
 
+    char player_id_str[16]; // Tillräckligt stor för en 32-bitars int
+    snprintf(player_id_str, sizeof(player_id_str), "%d", playerID);
+    PRINTFC_MQTT("MQTT config pleyerID: %d", playerID);
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
             .address.uri = BROKER_ADDRESS,
@@ -173,7 +176,8 @@ void mqtt_app_start(mqtt_init_param_t* params){
             .authentication = {
                 .certificate = (const char*)client_cert_pem,
                 .key = (const char*)client_key_pem,
-            }
+            },
+            .client_id = player_id_str,
         },
     };
 
@@ -221,13 +225,13 @@ void handle_myndigheten_data(char* json_payload) {
     // Baserat på typ, skriv ut instruktioner till spelaren
     if (strcmp(typ->valuestring, "val av ledare") == 0) {
         PRINTFC_MQTT("Myndighet: Val av ledare! Data: %s", cJSON_Print(data));
-        PRINTFC_CLIENT("Skriv /uplink:{\"val\":\"ok\"} för att godkänna, eller /uplink:{\"val\":\"neka\"} för att neka ledaren.");
+        PRINTFC_CLIENT("Skriv /uplink:ok för att godkänna, eller /uplink:neka för att neka ledaren.");
     } else if (strcmp(typ->valuestring, "ny runda") == 0) {
         PRINTFC_MQTT("Myndighet: Ny runda startad! Data: %s", cJSON_Print(data));
-        PRINTFC_CLIENT("Skriv /uplink:{\"val\":\"lyckas\"} för att bidra till uppdraget, eller /uplink:{\"val\":\"sabotera\"} för att sabotera.");
+        PRINTFC_CLIENT("Skriv /uplink:lyckas för att bidra till uppdraget, eller /uplink:sabotera för att sabotera.");
     } else if (strcmp(typ->valuestring, "val att sparka") == 0) {
         PRINTFC_MQTT("Myndighet: Val att sparka ledaren! Data: %s", cJSON_Print(data));
-        PRINTFC_CLIENT("Skriv /uplink:{\"val\":\"ok\"} för att sparka, eller /uplink:{\"val\":\"neka\"} för att behålla ledaren.");
+        PRINTFC_CLIENT("Skriv /uplink:ok för att sparka, eller /uplink:neka för att behålla ledaren.");
     } else if (strcmp(typ->valuestring, "uppdrag saboterat") == 0) {
         PRINTFC_MQTT("Myndighet: Uppdrag saboterat! Data: %s", cJSON_Print(data));
     } else if (strcmp(typ->valuestring, "uppdrag lyckades") == 0) {
