@@ -1,4 +1,4 @@
-## SECRET *** GAME
+## SECRET AGENT GAME
 
 MQTT CLient # Projekt: Secret Agents
 
