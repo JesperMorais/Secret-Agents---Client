@@ -9,7 +9,6 @@ MQTT CLient # Projekt: Secret Agents
 ## Översikt
 
 Ni ska spela spelet **Secret Agent**. För att kunna spela detta spel behöver vi bygga det först.  
-Projektet kommer att ha två nivåer: **G-nivå** och **VG-nivå**.
 
 ---
 
